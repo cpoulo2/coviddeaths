@@ -27,12 +27,19 @@ options(shiny.trace = TRUE)
 covid <- read_csv("data/COVID-19_Outcomes_by_Vaccination_Status.csv",col_types = list(.default = col_character())) |>
   mutate(Date = as.Date(`Week End`, format = "%m/%d/%Y")) |>
   mutate_at(c(4:21), as.numeric) |>
-  mutate("Vaccinated" = round((`Outcome Vaccinated`/`Population Vaccinated`)*10000, 2),
-         "Unvaccinated" = round((`Outcome Unvaccinated`/`Population Unvaccinated`)*10000, 2),
-         "Boosted" = round((`Outcome Boosted`/`Population Boosted`)*10000, 2),
-         "Vaccinated (logged)" = log(`Outcome Vaccinated`),
-         "Unvaccinated (logged)" = log(`Outcome Unvaccinated`),
-         "Boosted (logged)" = log(`Outcome Boosted`))
+  mutate("Vaccinated rate (per 10,000)" = round((`Outcome Vaccinated`/`Population Vaccinated`)*10000, 2),
+         "Unvaccinated rate (per 10,000)" = round((`Outcome Unvaccinated`/`Population Unvaccinated`)*10000, 2),
+         "Boosted rate (per 10,000)" = round((`Outcome Boosted`/`Population Boosted`)*10000, 2),
+         # "Vaccinated (logged)" = log(`Outcome Vaccinated`),
+         # "Unvaccinated (logged)" = log(`Outcome Unvaccinated`),
+         # "Boosted (logged)" = log(`Outcome Boosted`),
+         "Total" = `Population Vaccinated` + `Population Unvaccinated` + `Population Boosted`,
+         "Percent boosted" = round((`Population Boosted`/Total),2)) |>
+  group_by(Outcome,`Age Group`) |>
+  arrange(Date) |>
+  mutate("Cumulative Vaccinated" = cumsum(replace_na(`Outcome Vaccinated`,0)),
+         "Cumulative Unvaccinated" = cumsum(replace_na(`Outcome Unvaccinated`,0)),
+         "Cumulative Boosted" = cumsum(replace_na(`Outcome Boosted`,0)))
 
 # Define server logic required to draw a histogram
 shinyServer(function(input, output, session) {
@@ -50,7 +57,7 @@ shinyServer(function(input, output, session) {
   
   rate <- reactive({
     covidoutdate() |>
-      pivot_longer(cols = c(Vaccinated,Unvaccinated,Boosted), names_to = "Vaccination status", values_to = "Rate per 10,000")
+      pivot_longer(cols = c(`Vaccinated rate (per 10,000)`,`Unvaccinated rate (per 10,000)`, `Boosted rate (per 10,000)`), names_to = "Vaccination status", values_to = "Rate per 10,000")
   })
   
   raw <- reactive({
@@ -58,16 +65,15 @@ shinyServer(function(input, output, session) {
       pivot_longer(cols = c(`Outcome Unvaccinated`,`Outcome Vaccinated`,`Outcome Boosted`), names_to = "Vaccination status", values_to = "Totals")
   })
   
-  logged <- reactive({
+  deathtoll <- reactive({
     covidoutdate() |>
-      pivot_longer(cols = c(`Outcome Unvaccinated`,`Outcome Vaccinated`,`Outcome Boosted`), names_to = "Vaccination status", values_to = "Logged")
+      pivot_longer(cols = c(`Cumulative Vaccinated`,`Cumulative Unvaccinated`,`Cumulative Boosted`), names_to = "Vaccination status", values_to = "Cumulative toll")
   })
   
-  logged <- reactive({
-    covidoutdate() |>
-      pivot_longer(cols = c(`Unvaccinated (logged)`,`Vaccinated (logged)`,`Boosted (logged)`), names_to = "Vaccination status", values_to = "Natural log")
+  tbl <- reactive({
+    covidout()[,-c(4:13,20,21)]
   })
-  
+
   
   output$plot <- renderPlotly({
     plot_ly(
@@ -101,55 +107,36 @@ shinyServer(function(input, output, session) {
   
   output$plot3 <- renderPlotly({
     plot_ly(
-      data = logged(),
+      data = deathtoll(),
       x = ~ Date,
-      y = ~`Natural log`,
+      y = ~`Cumulative toll`,
       color = ~`Vaccination status`,
       type = 'bar',
       text = ~`Week End`,
       hoverinfo = "text",
-      hovertext = paste("Date :", raw()$`Week End`,
-                        "<br> Total :", raw()$`Natural log`)
+      hovertext = paste("Date :", deathtoll()$`Week End`,
+                        "<br> Total :", deathtoll()$`Cumulative toll`)
     ) 
     
   })
   
+  output$table <- renderDataTable({
+    
+    covidoutdate()[,-c(4:13,20,21)]
+  })
+    
+    
+  output$download_data <- downloadHandler(
+    
+    filename = function() {
+      # this names the csv file with today's date
+      paste('output-', Sys.Date(), '.csv', sep='') 
+    },
+    content = function(file) {
+      write_csv(covidoutdate()[,-c(4:13,20,21,22)], file)
+    }
+    
+  )
   
 })
-  
-  
-#   output$trendPlot <- renderGraph({
-#     if (length(input$name)==0) print("Please select at least one country")
-#     
-#     else {
-#       df_trend <- covid  %>%
-#         filter(Outcome %in% input$xvar)
-#       
-#       ggideal_point <- ggplot(df_trend) +
-#         geom_line(aes(x=Date, y=Vaccinated_rate_per1000, by=Outcome, color=Outcome)) +
-#         labs(x = "Year") +
-#         labs(y = "Ideology") +
-#         labs(title = "Ideal Points for Countries") +
-#         scale_colour_hue("clarity",l=70, c=150) +
-#         theme_few()
-#       
-#       # Year range
-#       min_Year <- min(df_trend$Date)
-#       max_Year <- max(df_trend$Date)
-#       
-#       # use gg2list() to convert from ggplot->plotly
-#       gg <- gg2list(ggideal_point)
-#       
-#       # Send this message up to the browser client, which will get fed through to
-#       # Plotly's javascript graphing library embedded inside the graph
-#       return(list(
-#         list(
-#           id="trendPlot",
-#           task="newPlot",
-#           data=gg$data,
-#           layout=gg$layout
-#         )
-#       ))
-#     }
-#   })
-# })
+
