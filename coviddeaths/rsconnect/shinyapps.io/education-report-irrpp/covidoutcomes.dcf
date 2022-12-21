@@ -5,10 +5,10 @@ account: education-report-irrpp
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 7910662
-bundleId: 6651463
-url: https://education-report-irrpp.shinyapps.io/covidoutcomes/
-when: 1671408511.58328
-lastSyncTime: 1671408511.58329
+bundleId: 6655860
+url: https://1859analytics.shinyapps.io/covidoutcomes/
+when: 1671499053.06347
+lastSyncTime: 1671499053.06347
 asMultiple: FALSE
 asStatic: FALSE
 ignoredFiles: data/covid_deaths.rds
